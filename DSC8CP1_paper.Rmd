@@ -1,0 +1,124 @@
+---
+title: "Course #8 Project"
+author: "David Stanley"
+date: "November 10, 2019"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Introduction:
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants and predict the manner in which they did the exercise. This is the "classe" variable in the training set described by the following classes A through E: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+As requested, the data was made available by the following website:
+http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har
+
+and related publication.
+
+Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6.
+
+
+## Loading and cleaning the data:
+```{r}
+#download files to local computer and set up working directory for loading in the data:
+
+setwd("D:/JHU Data Science Program/Course 8 Practical Machine Learning/Course Project")
+Data_Train=read.csv("pml-training.csv")
+Data_Test=read.csv("pml-testing.csv")
+
+#load in necessary packages related to the machine learning models:
+
+library(caret)
+library(rattle)
+
+# check for missing values and NA values and based on this information, clean the data set for better manipulation
+# criteria for clean data in this exercise was to remove columns having majority (90%) NA or blank values
+
+remove_info_train=which(colSums(is.na(Data_Train)| Data_Train=="")>0.9*dim(Data_Train)[1])
+Clean_Data_Train=Data_Train[,-remove_info_train]
+
+# remove first 7 columns because they just contain info on the people who did the test, timestamps, etc which isn't relevant to the study
+
+Clean_Data_Train= Clean_Data_Train[,-c(1:7)]
+
+#Same procedure for cleaning the Test Data Set
+
+remove_info_test=which(colSums(is.na(Data_Test)| Data_Test=="")>0.9*dim(Data_Test)[1])
+Clean_Data_Test=Data_Test[,-remove_info_test]
+Clean_Data_Test= Clean_Data_Test[,-c(1:7)]
+```
+
+## Applying 3 types of modeling from class: Classification Tree, Gradient Boosting, and Random Forest: 
+
+```{r}
+# Set up the partitions for the Training and Testing Data sets to be used in the three models:
+
+set.seed(3344)
+inTrain=createDataPartition(Clean_Data_Train$classe,p=0.75,list=FALSE)
+Training=Clean_Data_Train[inTrain,]
+Testing=Clean_Data_Train[-inTrain,]
+
+# test 3 models to see which is the most accurate  (classification tree, random forest, gradient boosting method)
+# cross validation with 5 folds will be used
+validation=trainControl(method="cv", number=5)
+
+#Classification Tree:
+C_Tree=train(classe ~., data=Training, method="rpart",trControl=validation)
+fancyRpartPlot(C_Tree$finalModel)
+predict_train=predict(C_Tree,newdata=Testing)
+Matrix_CT=confusionMatrix(Testing$classe,predict_train)
+Matrix_CT$table
+Matrix_CT$overall[1]
+```
+
+The Accuracy of this model was about 50%, let's now see what results we can achieve with ther other two models.
+
+
+Applying the Random Forests model:
+```{r}
+RF_model=train(classe ~.,data=Training,method="rf",trControl=validation,verbose=FALSE)
+print(RF_model)
+
+
+plot(RF_model,main="Accuracy of RF as a function of # of predictors")
+
+predict_train_RF=predict(RF_model,newdata=Testing)
+Matrix_RF=confusionMatrix(Testing$classe,predict_train_RF)
+Matrix_RF$table
+Matrix_RF$overall[1]
+
+
+names(RF_model$finalModel)
+RF_model$finalModel$classes
+plot(RF_model$finalModel,main="Error of RF Model as a function of number of trees")
+```
+Random forest gives us an accuracy of about 99.6% with cross validation of 5 steps. Final approach will be the gradient boosting method. 
+
+
+Using the gradient boosting method:
+```{r}
+GBM_model=train(classe ~.,data=Training,method="gbm",trControl=validation,verbose=FALSE)
+print(GBM_model)
+predict_train_GBM=predict(GBM_model,newdata=Testing)
+Matrix_GBM=confusionMatrix(Testing$classe,predict_train_GBM)
+Matrix_GBM$table
+Matrix_GBM$overall[1]
+```
+
+
+Best model overall was the random forest model, therefore we will apply that particular model to the test data set.
+```{r}
+Predict_Test=predict(RF_model,newdata=Clean_Data_Test)
+Final_Table=as.data.frame(Predict_Test)
+colnames(Final_Table)="Classe"
+Final_Names=as.data.frame(Data_Test[,2])
+colnames(Final_Names)="Name"
+Final_Table1=cbind(Final_Names,Final_Table)
+Final_Table1
+```
